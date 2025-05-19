@@ -1,0 +1,15 @@
+modules:
+  confluence:contextMenu:
+    - key: user-tools-3-hello-world-context-menu
+      resource: main
+      title: user-tools-3
+  function:
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: src/frontend
+app:
+  runtime:
+    name: nodejs22.x
+  id: ari:cloud:ecosystem::app/86bb8ca1-e54f-45a4-9171-61309236cc4d

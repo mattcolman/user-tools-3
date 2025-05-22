@@ -7,6 +7,19 @@ const App = () => {
   const [userEmails, setUserEmails] = useState({});
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  const handleCopyEmails = async () => {
+    try {
+      const emailList = Object.values(userEmails).join('\n');
+      await navigator.clipboard.writeText(emailList);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000); // Reset success message after 2 seconds
+    } catch (err) {
+      console.error('Failed to copy emails:', err);
+      setError('Failed to copy emails to clipboard');
+    }
+  };
 
   const findMentions = (text) => {
     const mentionRegex = /@([^@\s]+(?:\s+[^@\s]+)*)/g;
@@ -97,6 +110,31 @@ const App = () => {
               </li>
             ))}
           </ul>
+          <div style={{ marginTop: '16px' }}>
+            <button 
+              onClick={handleCopyEmails}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#0052CC',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Copy Email Addresses
+            </button>
+            {copySuccess && (
+              <span style={{ 
+                color: '#00875A', 
+                marginLeft: '8px',
+                fontSize: '14px'
+              }}>
+                ✓ Copied to clipboard!
+              </span>
+            )}
+          </div>
         </>
       )}
     </div>

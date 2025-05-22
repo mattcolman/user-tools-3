@@ -3,12 +3,19 @@ modules:
     - key: user-tools-3-hello-world-context-menu
       resource: main
       title: user-tools-3
-  function:
-    - key: resolver
-      handler: index.handler
 resources:
   - key: main
     path: src/frontend
+permissions:
+  scopes:
+    - read:jira-user    
+    - read:confluence-user
+  external:
+    fetch:
+      backend:
+        - '*.atlassian.net'
+        - '*.jira.com'
+        - '*.confluence.com'
 app:
   runtime:
     name: nodejs22.x

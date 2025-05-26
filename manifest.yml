@@ -1,21 +1,21 @@
 modules:
   confluence:contextMenu:
     - key: user-tools-3-hello-world-context-menu
+      title: user-tools-3a
       resource: main
-      title: user-tools-3
+      resolver:
+        function: resolver
+      viewportSize: small
+  function:
+    - key: resolver
+      handler: index.handler
 resources:
   - key: main
-    path: src/frontend
+    path: static/hello-world/build
 permissions:
   scopes:
     - read:jira-user    
     - read:confluence-user
-  external:
-    fetch:
-      backend:
-        - '*.atlassian.net'
-        - '*.jira.com'
-        - '*.confluence.com'
 app:
   runtime:
     name: nodejs22.x

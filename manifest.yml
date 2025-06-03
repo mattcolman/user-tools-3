@@ -5,7 +5,6 @@ modules:
       resource: main
       resolver:
         function: resolver
-      viewportSize: small
   function:
     - key: resolver
       handler: index.handler

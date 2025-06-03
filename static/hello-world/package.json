@@ -4,7 +4,9 @@
   "private": true,
   "homepage": ".",
   "dependencies": {
+    "@atlaskit/button": "^17.4.0",
     "@atlaskit/css-reset": "^6.6.2",
+    "@atlaskit/tabs": "^18.1.2",
     "@forge/bridge": "4.5.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

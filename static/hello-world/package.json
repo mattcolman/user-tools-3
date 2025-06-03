@@ -5,9 +5,14 @@
   "homepage": ".",
   "dependencies": {
     "@atlaskit/css-reset": "^6.6.2",
+    "@atlaskit/tabs": "^14.0.0",
+    "@atlaskit/tokens": "^5.0.0",
+    "@compiled/react": "^0.18.4",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@forge/bridge": "4.5.2",
-    "react": "^16",
-    "react-dom": "^16"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "react-scripts": "^5.0.1"

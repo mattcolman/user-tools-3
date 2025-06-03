@@ -4,8 +4,7 @@ modules:
       title: user-tools-3a
       resource: main
       resolver:
-        function: resolver
-      viewportSize: small
+        function: resolver      
   function:
     - key: resolver
       handler: index.handler

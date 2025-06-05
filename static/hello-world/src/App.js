@@ -85,7 +85,13 @@ const App = () => {
   }
 
   if (isLoading) {
-    return <div style={{ padding: "16px" }}>Loading...</div>;
+    return (
+      <div style={{ padding: "16px" }}>
+        <div className="skeleton-line" style={{ height: "20px", width: "60%" }}></div>
+        <div className="skeleton-line" style={{ height: "16px", width: "90%" }}></div>
+        <div className="skeleton-line" style={{ height: "16px", width: "40%" }}></div>
+      </div>
+    );
   }
 
   return (

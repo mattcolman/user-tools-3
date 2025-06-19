@@ -5,6 +5,8 @@
   "homepage": ".",
   "dependencies": {
     "@atlaskit/css-reset": "^6.6.2",
+    "@atlaskit/tabs": "^15.0.0",
+    "@atlaskit/button": "^17.0.0",
     "@forge/bridge": "^4.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

@@ -7,6 +7,7 @@ const App = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [userCache, setUserCache] = useState(new Map());
 
   const handleCopyEmails = async () => {
     try {
@@ -26,8 +27,13 @@ const App = () => {
   };
 
   const lookupUserEmail = async (displayName) => {
+    if (userCache.has(displayName)) {
+      console.log(`Cache hit for user: ${displayName}`);
+      return userCache.get(displayName);
+    }
+
     try {
-      // Use the Jira REST API to search for users
+      console.log(`API call for user: ${displayName}`);
       const response = await requestJira(
         `/rest/api/3/user/search?query=${encodeURIComponent(displayName)}`
       );
@@ -36,14 +42,20 @@ const App = () => {
         const users = await response.json();
         console.log(`User lookup response for ${displayName}:`, users);
 
-        // Return the email of the first matching user
+        let email = null;
         if (users && users.length > 0) {
-          return users[0].emailAddress;
+          email = users[0].emailAddress;
         }
+
+        setUserCache(prev => new Map(prev).set(displayName, email));
+        return email;
+      } else {
+        setUserCache(prev => new Map(prev).set(displayName, null));
         return null;
       }
     } catch (err) {
       console.error(`Failed to lookup user ${displayName}:`, err);
+      setUserCache(prev => new Map(prev).set(displayName, null));
       return null;
     }
   };
@@ -57,11 +69,14 @@ const App = () => {
 
         // Find and process @mentions
         const mentions = findMentions(text);
+        const uniqueMentions = [...new Set(mentions)];
         const emailResults = {};
 
-        // Look up each mentioned user
+        console.log(`Found ${mentions.length} total mentions, ${uniqueMentions.length} unique mentions`);
+
+        // Look up each unique mentioned user
         await Promise.all(
-          mentions.map(async (mention) => {
+          uniqueMentions.map(async (mention) => {
             const email = await lookupUserEmail(mention);
             if (email) {
               emailResults[mention] = email;

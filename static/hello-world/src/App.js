@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { view, requestJira } from "@forge/bridge";
+import { findMentions } from "./utils/mentionUtils";
 
 const App = () => {
   const [selectedText, setSelectedText] = useState("");
@@ -20,10 +21,6 @@ const App = () => {
     }
   };
 
-  const findMentions = (text) => {
-    const mentionRegex = /@([^@\s]+(?:\s+[^@\s]+)*)/g;
-    return [...text.matchAll(mentionRegex)].map((match) => match[1]);
-  };
 
   const lookupUserEmail = async (displayName) => {
     try {

@@ -1,28 +1,28 @@
 import React, { useState, useEffect } from "react";
 import { view, requestJira } from "@forge/bridge";
 import { findMentions } from "./utils/mentionUtils";
+import Tabs from "@atlaskit/tabs";
+import Button from "@atlaskit/button";
 
 const App = () => {
   const [selectedText, setSelectedText] = useState("");
-  const [userEmails, setUserEmails] = useState({});
+  const [usersByMention, setUsersByMention] = useState({}); // { mention: { email, displayName, avatarUrl } }
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [copySuccess, setCopySuccess] = useState("");
 
-  const handleCopyEmails = async () => {
+  const copyToClipboard = async (textToCopy, successMessage) => {
     try {
-      const emailList = Object.values(userEmails).join("\n");
-      await navigator.clipboard.writeText(emailList);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000); // Reset success message after 2 seconds
+      await navigator.clipboard.writeText(textToCopy);
+      setCopySuccess(successMessage);
+      setTimeout(() => setCopySuccess(""), 2000);
     } catch (err) {
-      console.error("Failed to copy emails:", err);
-      setError("Failed to copy emails to clipboard");
+      console.error("Failed to copy:", err);
+      setError("Failed to copy to clipboard");
     }
   };
 
-
-  const lookupUserEmail = async (displayName) => {
+  const lookupUser = async (displayName) => {
     try {
       // Use the Jira REST API to search for users
       const response = await requestJira(
@@ -33,10 +33,17 @@ const App = () => {
         const users = await response.json();
         console.log(`User lookup response for ${displayName}:`, users);
 
-        // Return the email of the first matching user
         if (users && users.length > 0) {
-          return users[0].emailAddress;
+          const u = users[0];
+          return {
+            email: u.emailAddress || "",
+            displayName: u.displayName || displayName,
+            avatarUrl: (u.avatarUrls && (u.avatarUrls[48] || u.avatarUrls[24] || u.avatarUrls[16])) || "",
+          };
         }
+        return null;
+      } else {
+        console.error("User search failed with status:", response.status);
         return null;
       }
     } catch (err) {
@@ -54,21 +61,20 @@ const App = () => {
 
         // Find and process @mentions
         const mentions = findMentions(text);
-        const emailResults = {};
+        const resultMap = {};
 
-        // Look up each mentioned user
         await Promise.all(
           mentions.map(async (mention) => {
-            const email = await lookupUserEmail(mention);
-            if (email) {
-              emailResults[mention] = email;
+            const user = await lookupUser(mention);
+            if (user) {
+              resultMap[mention] = user;
             }
           })
         );
 
-        setUserEmails(emailResults);
+        setUsersByMention(resultMap);
       } catch (err) {
-        setError(err.message);
+        setError(err.message || "Unknown error");
         console.error("Failed to get context:", err);
       } finally {
         setIsLoading(false);
@@ -78,56 +84,82 @@ const App = () => {
   }, []);
 
   if (error) {
-    return <div style={{ color: "red", padding: "16px" }}>Error: {error}</div>;
+    return <div style={{ color: "red", padding: 16 }}>Error: {error}</div>;
   }
 
   if (isLoading) {
-    return <div style={{ padding: "16px" }}>Loading...</div>;
+    return <div style={{ padding: 16 }}>Loading...</div>;
   }
 
+  const emails = Object.values(usersByMention).map((u) => u.email).filter(Boolean);
+  const fullNames = Object.values(usersByMention).map((u) => u.displayName).filter(Boolean);
+
   return (
-    <div style={{ padding: "16px" }}>
+    <div style={{ padding: 16 }}>
       <h2>Selected Text:</h2>
       <p>{selectedText}</p>
 
-      {Object.keys(userEmails).length > 0 && (
-        <>
-          <h3>Found Users:</h3>
-          <ul>
-            {Object.entries(userEmails).map(([name, email]) => (
-              <li key={name}>
-                @{name}: {email}
-              </li>
-            ))}
-          </ul>
-          <div style={{ marginTop: "16px" }}>
-            <button
-              onClick={handleCopyEmails}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#0052CC",
-                color: "white",
-                border: "none",
-                borderRadius: "3px",
-                cursor: "pointer",
-                fontSize: "14px",
-              }}
-            >
-              Copy Email Addresses
-            </button>
-            {copySuccess && (
-              <span
-                style={{
-                  color: "#00875A",
-                  marginLeft: "8px",
-                  fontSize: "14px",
-                }}
-              >
-                ✓ Copied to clipboard!
-              </span>
-            )}
-          </div>
-        </>
+      {Object.keys(usersByMention).length > 0 && (
+        <Tabs
+          id="user-tools-tabs"
+          tabs={[
+            {
+              label: "Email",
+              content: (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Email addresses</h3>
+                  <ul>
+                    {emails.map((email) => (
+                      <li key={email}>{email}</li>
+                    ))}
+                  </ul>
+                  <div style={{ marginTop: 16 }}>
+                    <Button
+                      appearance="primary"
+                      onClick={() => copyToClipboard(emails.join("\n"), "Emails copied")}
+                      isDisabled={emails.length === 0}
+                    >
+                      Copy all
+                    </Button>
+                    {copySuccess === "Emails copied" && (
+                      <span style={{ color: "#00875A", marginLeft: 8, fontSize: 14 }}>
+                        ✓ Copied to clipboard!
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ),
+            },
+            {
+              label: "Full name",
+              content: (
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Full names</h3>
+                  <ul>
+                    {fullNames.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                  <div style={{ marginTop: 16 }}>
+                    <Button
+                      appearance="primary"
+                      onClick={() => copyToClipboard(fullNames.join("\n"), "Names copied")}
+                      isDisabled={fullNames.length === 0}
+                    >
+                      Copy all
+                    </Button>
+                    {copySuccess === "Names copied" && (
+                      <span style={{ color: "#00875A", marginLeft: 8, fontSize: 14 }}>
+                        ✓ Copied to clipboard!
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ),
+            },
+            { label: "Avatar", content: <div /> },
+          ]}
+        />
       )}
     </div>
   );

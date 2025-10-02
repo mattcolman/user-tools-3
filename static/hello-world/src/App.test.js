@@ -58,11 +58,11 @@ describe('App Component', () => {
         expect(screen.getByText('Hello @john')).toBeInTheDocument();
       });
       
-      const copyButton = screen.getByText('Copy Email Addresses');
+      const copyButton = screen.getByRole('button', { name: 'Copy all' });
       fireEvent.click(copyButton);
       
       await waitFor(() => {
-        expect(screen.getByText('Error: Failed to copy emails to clipboard')).toBeInTheDocument();
+        expect(screen.getByText('Error: Failed to copy to clipboard')).toBeInTheDocument();
       });
     });
   });
@@ -91,9 +91,9 @@ describe('App Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Selected Text:')).toBeInTheDocument();
         expect(screen.getByText(selectedText)).toBeInTheDocument();
-        expect(screen.getByText('Found Users:')).toBeInTheDocument();
-        expect(screen.getByText('@john: john@example.com')).toBeInTheDocument();
-        expect(screen.getByText('@jane: jane@example.com')).toBeInTheDocument();
+        expect(screen.getByText('Email addresses')).toBeInTheDocument();
+        expect(screen.getByText('john@example.com')).toBeInTheDocument();
+        expect(screen.getByText('jane@example.com')).toBeInTheDocument();
       });
     });
 
@@ -107,7 +107,7 @@ describe('App Component', () => {
       
       await waitFor(() => {
         expect(screen.getByText('No mentions in this text')).toBeInTheDocument();
-        expect(screen.queryByText('Found Users:')).not.toBeInTheDocument();
+        expect(screen.queryByText('Email addresses')).not.toBeInTheDocument();
       });
     });
 
@@ -127,7 +127,7 @@ describe('App Component', () => {
       
       await waitFor(() => {
         expect(screen.getByText('Hello @unknown')).toBeInTheDocument();
-        expect(screen.queryByText('Found Users:')).not.toBeInTheDocument();
+        expect(screen.queryByText('Email addresses')).not.toBeInTheDocument();
       });
     });
   });
@@ -180,7 +180,7 @@ describe('App Component', () => {
       
       await waitFor(() => {
         expect(screen.getByText('Hello @john')).toBeInTheDocument();
-        expect(screen.queryByText('Found Users:')).not.toBeInTheDocument();
+        expect(screen.queryByText('Email addresses')).not.toBeInTheDocument();
       });
     });
   });
@@ -204,10 +204,10 @@ describe('App Component', () => {
       render(<App />);
       
       await waitFor(() => {
-        expect(screen.getByText('Copy Email Addresses')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Copy all' })).toBeInTheDocument();
       });
       
-      const copyButton = screen.getByText('Copy Email Addresses');
+      const copyButton = screen.getByRole('button', { name: 'Copy all' });
       fireEvent.click(copyButton);
       
       await waitFor(() => {
@@ -231,10 +231,10 @@ describe('App Component', () => {
       render(<App />);
       
       await waitFor(() => {
-        expect(screen.getByText('Copy Email Addresses')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Copy all' })).toBeInTheDocument();
       });
       
-      const copyButton = screen.getByText('Copy Email Addresses');
+      const copyButton = screen.getByRole('button', { name: 'Copy all' });
       fireEvent.click(copyButton);
       
       await waitFor(() => {
@@ -267,11 +267,11 @@ describe('App Component', () => {
       
       await waitFor(() => {
         expect(screen.getByRole('heading', { level: 2, name: 'Selected Text:' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 3, name: 'Found Users:' })).toBeInTheDocument();
+        expect(screen.getByText('Email addresses')).toBeInTheDocument();
       });
     });
 
-    it('should render copy button with correct styling', async () => {
+    it('should render Copy all button', async () => {
       view.getContext.mockResolvedValue({
         extension: { selectedText: 'Hello @john' }
       });
@@ -284,12 +284,8 @@ describe('App Component', () => {
       render(<App />);
       
       await waitFor(() => {
-        const copyButton = screen.getByText('Copy Email Addresses');
+        const copyButton = screen.getByRole('button', { name: 'Copy all' });
         expect(copyButton).toBeInTheDocument();
-        expect(copyButton).toHaveStyle({
-          backgroundColor: 'rgb(0, 82, 204)',
-          color: 'white'
-        });
       });
     });
   });

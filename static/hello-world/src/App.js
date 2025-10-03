@@ -5,24 +5,41 @@ import { findMentions } from "./utils/mentionUtils";
 const App = () => {
   const [selectedText, setSelectedText] = useState("");
   const [userEmails, setUserEmails] = useState({});
+  const [userFullNames, setUserFullNames] = useState({});
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [copyType, setCopyType] = useState("");
+  const [activeTab, setActiveTab] = useState("email");
 
   const handleCopyEmails = async () => {
     try {
       const emailList = Object.values(userEmails).join("\n");
       await navigator.clipboard.writeText(emailList);
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000); // Reset success message after 2 seconds
+      setCopyType("emails");
+      setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error("Failed to copy emails:", err);
       setError("Failed to copy emails to clipboard");
     }
   };
 
+  const handleCopyFullNames = async () => {
+    try {
+      const nameList = Object.values(userFullNames).join("\n");
+      await navigator.clipboard.writeText(nameList);
+      setCopySuccess(true);
+      setCopyType("names");
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy names:", err);
+      setError("Failed to copy names to clipboard");
+    }
+  };
 
-  const lookupUserEmail = async (displayName) => {
+
+  const lookupUserData = async (displayName) => {
     try {
       // Use the Jira REST API to search for users
       const response = await requestJira(
@@ -33,9 +50,13 @@ const App = () => {
         const users = await response.json();
         console.log(`User lookup response for ${displayName}:`, users);
 
-        // Return the email of the first matching user
+        // Return the email and display name of the first matching user
         if (users && users.length > 0) {
-          return users[0].emailAddress;
+          const user = users[0];
+          return {
+            email: user.emailAddress,
+            fullName: user.displayName
+          };
         }
         return null;
       }
@@ -55,18 +76,21 @@ const App = () => {
         // Find and process @mentions
         const mentions = findMentions(text);
         const emailResults = {};
+        const nameResults = {};
 
         // Look up each mentioned user
         await Promise.all(
           mentions.map(async (mention) => {
-            const email = await lookupUserEmail(mention);
-            if (email) {
-              emailResults[mention] = email;
+            const userData = await lookupUserData(mention);
+            if (userData) {
+              emailResults[mention] = userData.email;
+              nameResults[mention] = userData.fullName;
             }
           })
         );
 
         setUserEmails(emailResults);
+        setUserFullNames(nameResults);
       } catch (err) {
         setError(err.message);
         console.error("Failed to get context:", err);
@@ -91,43 +115,134 @@ const App = () => {
       <p>{selectedText}</p>
 
       {Object.keys(userEmails).length > 0 && (
-        <>
-          <h3>Found Users:</h3>
-          <ul>
-            {Object.entries(userEmails).map(([name, email]) => (
-              <li key={name}>
-                @{name}: {email}
-              </li>
-            ))}
-          </ul>
-          <div style={{ marginTop: "16px" }}>
-            <button
-              onClick={handleCopyEmails}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#0052CC",
-                color: "white",
-                border: "none",
-                borderRadius: "3px",
-                cursor: "pointer",
-                fontSize: "14px",
-              }}
-            >
-              Copy Email Addresses
-            </button>
-            {copySuccess && (
-              <span
-                style={{
-                  color: "#00875A",
-                  marginLeft: "8px",
-                  fontSize: "14px",
-                }}
-              >
-                ✓ Copied to clipboard!
-              </span>
+        <div>
+          {/* Tab Navigation */}
+          <div style={{ 
+            borderBottom: "2px solid #DFE1E6",
+            marginBottom: "16px"
+          }}>
+            <div style={{ display: "flex", gap: "0" }}>
+              {["email", "fullname", "avatar"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    padding: "12px 16px",
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    color: activeTab === tab ? "#0052CC" : "#626F86",
+                    borderBottom: activeTab === tab ? "2px solid #0052CC" : "2px solid transparent",
+                    marginBottom: "-2px",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  {tab === "email" ? "Email" : tab === "fullname" ? "Full Name" : "Avatar"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tab Content */}
+          <div style={{ minHeight: "120px" }}>
+            {activeTab === "email" && (
+              <div>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px 0" }}>
+                  {Object.values(userEmails).map((email, index) => (
+                    <li key={index} style={{ 
+                      marginBottom: "8px",
+                      padding: "4px 0",
+                      fontSize: "14px"
+                    }}>
+                      {email}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={handleCopyEmails}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#0052CC",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500"
+                  }}
+                >
+                  Copy All
+                </button>
+                {copySuccess && copyType === "emails" && (
+                  <span
+                    style={{
+                      color: "#00875A",
+                      marginLeft: "8px",
+                      fontSize: "14px",
+                    }}
+                  >
+                    ✓ Copied to clipboard!
+                  </span>
+                )}
+              </div>
+            )}
+
+            {activeTab === "fullname" && (
+              <div>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 16px 0" }}>
+                  {Object.values(userFullNames).map((name, index) => (
+                    <li key={index} style={{ 
+                      marginBottom: "8px",
+                      padding: "4px 0",
+                      fontSize: "14px"
+                    }}>
+                      {name}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={handleCopyFullNames}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#0052CC",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "3px",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: "500"
+                  }}
+                >
+                  Copy All
+                </button>
+                {copySuccess && copyType === "names" && (
+                  <span
+                    style={{
+                      color: "#00875A",
+                      marginLeft: "8px",
+                      fontSize: "14px",
+                    }}
+                  >
+                    ✓ Copied to clipboard!
+                  </span>
+                )}
+              </div>
+            )}
+
+            {activeTab === "avatar" && (
+              <div style={{ 
+                padding: "32px 0", 
+                color: "#626F86",
+                textAlign: "center",
+                fontSize: "14px"
+              }}>
+                Avatar functionality coming soon...
+              </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

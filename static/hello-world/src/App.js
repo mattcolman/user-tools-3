@@ -1,28 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { view, requestJira } from "@forge/bridge";
 import { findMentions } from "./utils/mentionUtils";
+import EmailsTab from "./components/EmailsTab";
+import AvatarsTab from "./components/AvatarsTab";
 
 const App = () => {
   const [selectedText, setSelectedText] = useState("");
+  const [userObjects, setUserObjects] = useState({});
   const [userEmails, setUserEmails] = useState({});
+  const [activeTab, setActiveTab] = useState("emails");
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [copySuccess, setCopySuccess] = useState(false);
 
-  const handleCopyEmails = async () => {
-    try {
-      const emailList = Object.values(userEmails).join("\n");
-      await navigator.clipboard.writeText(emailList);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000); // Reset success message after 2 seconds
-    } catch (err) {
-      console.error("Failed to copy emails:", err);
-      setError("Failed to copy emails to clipboard");
-    }
-  };
-
-
-  const lookupUserEmail = async (displayName) => {
+  const lookupUser = async (displayName) => {
     try {
       // Use the Jira REST API to search for users
       const response = await requestJira(
@@ -33,9 +23,9 @@ const App = () => {
         const users = await response.json();
         console.log(`User lookup response for ${displayName}:`, users);
 
-        // Return the email of the first matching user
+        // Return the full user object if found
         if (users && users.length > 0) {
-          return users[0].emailAddress;
+          return users[0];
         }
         return null;
       }
@@ -54,18 +44,23 @@ const App = () => {
 
         // Find and process @mentions
         const mentions = findMentions(text);
+        const userObjectResults = {};
         const emailResults = {};
 
         // Look up each mentioned user
         await Promise.all(
           mentions.map(async (mention) => {
-            const email = await lookupUserEmail(mention);
-            if (email) {
-              emailResults[mention] = email;
+            const user = await lookupUser(mention);
+            if (user) {
+              userObjectResults[mention] = user;
+              if (user.emailAddress) {
+                emailResults[mention] = user.emailAddress;
+              }
             }
           })
         );
 
+        setUserObjects(userObjectResults);
         setUserEmails(emailResults);
       } catch (err) {
         setError(err.message);
@@ -85,49 +80,58 @@ const App = () => {
     return <div style={{ padding: "16px" }}>Loading...</div>;
   }
 
+  const hasUsers = Object.keys(userObjects).length > 0;
+
   return (
     <div style={{ padding: "16px" }}>
       <h2>Selected Text:</h2>
-      <p>{selectedText}</p>
+      <p style={{ color: "#44546F", margin: "8px 0 16px 0" }}>{selectedText}</p>
 
-      {Object.keys(userEmails).length > 0 && (
+      {hasUsers ? (
         <>
-          <h3>Found Users:</h3>
-          <ul>
-            {Object.entries(userEmails).map(([name, email]) => (
-              <li key={name}>
-                @{name}: {email}
-              </li>
-            ))}
-          </ul>
-          <div style={{ marginTop: "16px" }}>
+          {/* Tab Navigation */}
+          <div style={{ borderBottom: "1px solid #EBECF0", marginBottom: "16px" }}>
             <button
-              onClick={handleCopyEmails}
+              onClick={() => setActiveTab("emails")}
               style={{
-                padding: "8px 16px",
-                backgroundColor: "#0052CC",
-                color: "white",
+                padding: "12px 16px",
+                backgroundColor: activeTab === "emails" ? "white" : "transparent",
+                color: activeTab === "emails" ? "#0052CC" : "#626F86",
                 border: "none",
-                borderRadius: "3px",
+                borderBottom: activeTab === "emails" ? "3px solid #0052CC" : "3px solid transparent",
                 cursor: "pointer",
                 fontSize: "14px",
+                fontWeight: activeTab === "emails" ? "600" : "400",
+                marginRight: "8px",
               }}
             >
-              Copy Email Addresses
+              Emails
             </button>
-            {copySuccess && (
-              <span
-                style={{
-                  color: "#00875A",
-                  marginLeft: "8px",
-                  fontSize: "14px",
-                }}
-              >
-                ✓ Copied to clipboard!
-              </span>
-            )}
+            <button
+              onClick={() => setActiveTab("avatars")}
+              style={{
+                padding: "12px 16px",
+                backgroundColor: activeTab === "avatars" ? "white" : "transparent",
+                color: activeTab === "avatars" ? "#0052CC" : "#626F86",
+                border: "none",
+                borderBottom: activeTab === "avatars" ? "3px solid #0052CC" : "3px solid transparent",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: activeTab === "avatars" ? "600" : "400",
+              }}
+            >
+              Avatars
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          <div style={{ paddingTop: "8px" }}>
+            {activeTab === "emails" && <EmailsTab userEmails={userEmails} />}
+            {activeTab === "avatars" && <AvatarsTab userObjects={userObjects} />}
           </div>
         </>
+      ) : (
+        <p style={{ color: "#626F86" }}>No users found in the selected text.</p>
       )}
     </div>
   );

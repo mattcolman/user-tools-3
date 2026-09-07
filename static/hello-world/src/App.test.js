@@ -1,7 +1,14 @@
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { view, requestJira, requestConfluence } from '@forge/bridge';
+import { copyAvatarsToClipboard, downloadAvatarSheet } from './utils/avatarUtils';
 import App from './App';
+
+jest.mock('./utils/avatarUtils', () => ({
+  ...jest.requireActual('./utils/avatarUtils'),
+  copyAvatarsToClipboard: jest.fn(),
+  downloadAvatarSheet: jest.fn(),
+}));
 
 const pageBody = (mentions) =>
   JSON.stringify({
@@ -29,14 +36,38 @@ const mockUser = ({ displayName, emailAddress }) => ({
     Promise.resolve({
       displayName,
       emailAddress,
-      avatarUrls: { '48x48': `https://avatar/${displayName}` },
+      avatarUrls: { '48x48': `https://avatars.example.net/${displayName}?size=48` },
     }),
 });
+
+const mockTwoUsers = () => {
+  mockPage([
+    { accountId: 'acc-1', text: '@John Smith' },
+    { accountId: 'acc-2', text: '@Jane Doe' },
+  ]);
+  requestJira
+    .mockResolvedValueOnce(
+      mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
+    )
+    .mockResolvedValueOnce(
+      mockUser({ displayName: 'Jane Doe', emailAddress: 'jane@example.com' })
+    );
+};
+
+const button = (name) => screen.getByRole('button', { name });
+
+const waitForGrid = () =>
+  waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Copy avatars' })).toBeInTheDocument();
+  });
 
 describe('App Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     navigator.clipboard.writeText.mockClear();
+    navigator.clipboard.writeText.mockResolvedValue(undefined);
+    copyAvatarsToClipboard.mockResolvedValue(undefined);
+    downloadAvatarSheet.mockResolvedValue(undefined);
     view.getContext.mockResolvedValue({
       extension: { content: { id: '12345' } },
     });
@@ -74,19 +105,13 @@ describe('App Component', () => {
     });
 
     it('should display error when clipboard write fails', async () => {
-      mockPage([{ accountId: 'acc-1', text: '@John Smith' }]);
-      requestJira.mockResolvedValue(
-        mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
-      );
+      mockTwoUsers();
       navigator.clipboard.writeText.mockRejectedValue(new Error('Clipboard error'));
 
       render(<App />);
+      await waitForGrid();
 
-      await waitFor(() => {
-        expect(screen.getByText('Copy Email Addresses')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('Copy Email Addresses'));
+      fireEvent.click(button('Copy email addresses'));
 
       await waitFor(() => {
         expect(
@@ -97,25 +122,15 @@ describe('App Component', () => {
   });
 
   describe('Successful Flow', () => {
-    it('should display every mentioned user with their email', async () => {
-      mockPage([
-        { accountId: 'acc-1', text: '@John Smith' },
-        { accountId: 'acc-2', text: '@Jane Doe' },
-      ]);
-      requestJira
-        .mockResolvedValueOnce(
-          mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
-        )
-        .mockResolvedValueOnce(
-          mockUser({ displayName: 'Jane Doe', emailAddress: 'jane@example.com' })
-        );
+    it('should show a card per mentioned user, all selected by default', async () => {
+      mockTwoUsers();
 
       render(<App />);
+      await waitForGrid();
 
-      await waitFor(() => {
-        expect(screen.getByText('John Smith: john@example.com')).toBeInTheDocument();
-        expect(screen.getByText('Jane Doe: jane@example.com')).toBeInTheDocument();
-      });
+      expect(screen.getAllByText('John Smith').length).toBeGreaterThan(0);
+      expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+      expect(screen.getByText('2 of 2 selected')).toBeInTheDocument();
     });
 
     it('should tell the user when the page has no mentions', async () => {
@@ -134,133 +149,164 @@ describe('App Component', () => {
       requestJira.mockResolvedValue({ ok: false, status: 403 });
 
       render(<App />);
+      await waitForGrid();
 
-      await waitFor(() => {
-        expect(screen.getByText('John Smith')).toBeInTheDocument();
-      });
-      expect(screen.getByText('Copy Email Addresses')).toBeDisabled();
-    });
-  });
-
-  describe('User Lookup', () => {
-    it('should request the page body as ADF', async () => {
-      mockPage([]);
-
-      render(<App />);
-
-      await waitFor(() => {
-        expect(requestConfluence).toHaveBeenCalledWith(
-          '/wiki/api/v2/pages/12345?body-format=atlas_doc_format'
-        );
-      });
+      expect(screen.getAllByText('John Smith').length).toBeGreaterThan(0);
+      expect(screen.getByText('No email available')).toBeInTheDocument();
+      expect(button('Copy avatars')).toBeDisabled();
+      expect(button('Copy email addresses')).toBeDisabled();
     });
 
-    it('should look users up by account id rather than by name', async () => {
+    it('should request the page body as ADF and look users up by account id', async () => {
       mockPage([{ accountId: 'acc:1/2', text: '@John Smith' }]);
       requestJira.mockResolvedValue(
         mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
       );
 
       render(<App />);
+      await waitForGrid();
+
+      expect(requestConfluence).toHaveBeenCalledWith(
+        '/wiki/api/v2/pages/12345?body-format=atlas_doc_format'
+      );
+      expect(requestJira).toHaveBeenCalledWith(
+        '/rest/api/3/user?accountId=acc%3A1%2F2'
+      );
+    });
+  });
+
+  describe('Selection', () => {
+    it('should exclude a user from actions when unchecked', async () => {
+      mockTwoUsers();
+
+      render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(screen.getByLabelText('Include Jane Doe'));
+
+      expect(screen.getByText('1 of 2 selected')).toBeInTheDocument();
+
+      fireEvent.click(button('Copy email addresses'));
 
       await waitFor(() => {
-        expect(requestJira).toHaveBeenCalledWith(
-          '/rest/api/3/user?accountId=acc%3A1%2F2'
-        );
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith('john@example.com');
       });
+    });
+
+    it('should support select none and select all', async () => {
+      mockTwoUsers();
+
+      render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(button('Select none'));
+      expect(screen.getByText('0 of 2 selected')).toBeInTheDocument();
+      expect(button('Copy avatars')).toBeDisabled();
+
+      fireEvent.click(button('Select all'));
+      expect(screen.getByText('2 of 2 selected')).toBeInTheDocument();
+      expect(button('Select all')).toBeDisabled();
     });
   });
 
   describe('Copy Functionality', () => {
-    it('should copy emails to clipboard and show success message', async () => {
-      mockPage([
-        { accountId: 'acc-1', text: '@John Smith' },
-        { accountId: 'acc-2', text: '@Jane Doe' },
-      ]);
-      requestJira
-        .mockResolvedValueOnce(
-          mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
-        )
-        .mockResolvedValueOnce(
-          mockUser({ displayName: 'Jane Doe', emailAddress: 'jane@example.com' })
-        );
+    it('should copy the selected emails', async () => {
+      mockTwoUsers();
 
       render(<App />);
+      await waitForGrid();
 
-      await waitFor(() => {
-        expect(screen.getByText('Copy Email Addresses')).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText('Copy Email Addresses'));
+      fireEvent.click(button('Copy email addresses'));
 
       await waitFor(() => {
         expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
           'john@example.com\njane@example.com'
         );
-        expect(screen.getByText('✓ Copied to clipboard!')).toBeInTheDocument();
+        expect(screen.getByText('✓ Copied email addresses')).toBeInTheDocument();
       });
     });
 
-    it('should hide success message after timeout', async () => {
-      jest.useFakeTimers();
-
-      mockPage([{ accountId: 'acc-1', text: '@John Smith' }]);
-      requestJira.mockResolvedValue(
-        mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
-      );
+    it('should copy the selected avatars at export size', async () => {
+      mockTwoUsers();
 
       render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(button('Copy avatars'));
 
       await waitFor(() => {
-        expect(screen.getByText('Copy Email Addresses')).toBeInTheDocument();
+        expect(copyAvatarsToClipboard).toHaveBeenCalledWith(
+          [
+            'https://avatars.example.net/John%20Smith?size=256',
+            'https://avatars.example.net/Jane%20Doe?size=256',
+          ],
+          { size: 256 }
+        );
+        expect(
+          screen.getByText('✓ Copied avatars — paste them into Figma')
+        ).toBeInTheDocument();
       });
+    });
 
-      fireEvent.click(screen.getByText('Copy Email Addresses'));
+    it('should fall back to copying avatar urls when the image copy fails', async () => {
+      mockTwoUsers();
+      copyAvatarsToClipboard.mockRejectedValue(new Error('not supported'));
+
+      render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(button('Copy avatars'));
 
       await waitFor(() => {
-        expect(screen.getByText('✓ Copied to clipboard!')).toBeInTheDocument();
+        expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+          'https://avatars.example.net/John%20Smith?size=256\nhttps://avatars.example.net/Jane%20Doe?size=256'
+        );
+        expect(
+          screen.getByText("Couldn't copy the images, copied avatar URLs instead")
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('should download the selected avatars as a sheet', async () => {
+      mockTwoUsers();
+
+      render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(button('Download avatars'));
+
+      await waitFor(() => {
+        expect(downloadAvatarSheet).toHaveBeenCalledWith(
+          [
+            'https://avatars.example.net/John%20Smith?size=256',
+            'https://avatars.example.net/Jane%20Doe?size=256',
+          ],
+          { size: 256 }
+        );
+        expect(screen.getByText('✓ Downloaded avatars.png')).toBeInTheDocument();
+      });
+    });
+
+    it('should hide the status message after a timeout', async () => {
+      jest.useFakeTimers();
+      mockTwoUsers();
+
+      render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(button('Copy email addresses'));
+
+      await waitFor(() => {
+        expect(screen.getByText('✓ Copied email addresses')).toBeInTheDocument();
       });
 
       jest.advanceTimersByTime(2000);
 
       await waitFor(() => {
-        expect(screen.queryByText('✓ Copied to clipboard!')).not.toBeInTheDocument();
+        expect(screen.queryByText('✓ Copied email addresses')).not.toBeInTheDocument();
       });
 
       jest.useRealTimers();
-    });
-  });
-
-  describe('Component Structure', () => {
-    it('should have proper heading structure', async () => {
-      mockPage([{ accountId: 'acc-1', text: '@John Smith' }]);
-      requestJira.mockResolvedValue(
-        mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
-      );
-
-      render(<App />);
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('heading', { level: 2, name: 'Mentioned Users' })
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('should render copy button with correct styling', async () => {
-      mockPage([{ accountId: 'acc-1', text: '@John Smith' }]);
-      requestJira.mockResolvedValue(
-        mockUser({ displayName: 'John Smith', emailAddress: 'john@example.com' })
-      );
-
-      render(<App />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Copy Email Addresses')).toHaveStyle({
-          backgroundColor: 'rgb(0, 82, 204)',
-          color: 'white',
-        });
-      });
     });
   });
 });

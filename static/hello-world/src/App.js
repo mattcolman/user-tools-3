@@ -1,80 +1,91 @@
 import React, { useState, useEffect } from "react";
-import { view, requestJira } from "@forge/bridge";
-import { findMentions } from "./utils/mentionUtils";
+import { view, requestConfluence, requestJira } from "@forge/bridge";
+import { findAdfMentions, parseAdf } from "./utils/mentionUtils";
+
+const fetchPageMentions = async (pageId) => {
+  const response = await requestConfluence(
+    `/wiki/api/v2/pages/${pageId}?body-format=atlas_doc_format`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to load page content (${response.status})`);
+  }
+
+  const page = await response.json();
+  const adf = parseAdf(
+    page.body && page.body.atlas_doc_format
+      ? page.body.atlas_doc_format.value
+      : null
+  );
+
+  return findAdfMentions(adf);
+};
+
+const fetchUser = async (accountId) => {
+  try {
+    const response = await requestJira(
+      `/rest/api/3/user?accountId=${encodeURIComponent(accountId)}`
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return await response.json();
+  } catch (err) {
+    console.error(`Failed to look up user ${accountId}:`, err);
+    return null;
+  }
+};
 
 const App = () => {
-  const [selectedText, setSelectedText] = useState("");
-  const [userEmails, setUserEmails] = useState({});
+  const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState(false);
 
+  const emails = users.map((user) => user.email).filter(Boolean);
+
   const handleCopyEmails = async () => {
     try {
-      const emailList = Object.values(userEmails).join("\n");
-      await navigator.clipboard.writeText(emailList);
+      await navigator.clipboard.writeText(emails.join("\n"));
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000); // Reset success message after 2 seconds
+      setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error("Failed to copy emails:", err);
       setError("Failed to copy emails to clipboard");
     }
   };
 
-
-  const lookupUserEmail = async (displayName) => {
-    try {
-      // Use the Jira REST API to search for users
-      const response = await requestJira(
-        `/rest/api/3/user/search?query=${encodeURIComponent(displayName)}`
-      );
-
-      if (response.ok) {
-        const users = await response.json();
-        console.log(`User lookup response for ${displayName}:`, users);
-
-        // Return the email of the first matching user
-        if (users && users.length > 0) {
-          return users[0].emailAddress;
-        }
-        return null;
-      }
-    } catch (err) {
-      console.error(`Failed to lookup user ${displayName}:`, err);
-      return null;
-    }
-  };
-
   useEffect(() => {
-    const fetchContext = async () => {
+    const loadMentionedUsers = async () => {
       try {
         const context = await view.getContext();
-        const text = context.extension.selectedText;
-        setSelectedText(text);
+        const pageId = context.extension.content.id;
+        const mentions = await fetchPageMentions(pageId);
 
-        // Find and process @mentions
-        const mentions = findMentions(text);
-        const emailResults = {};
-
-        // Look up each mentioned user
-        await Promise.all(
+        const resolved = await Promise.all(
           mentions.map(async (mention) => {
-            const email = await lookupUserEmail(mention);
-            if (email) {
-              emailResults[mention] = email;
-            }
+            const user = await fetchUser(mention.accountId);
+            return {
+              accountId: mention.accountId,
+              name: (user && user.displayName) || mention.text,
+              email: user ? user.emailAddress : null,
+              avatarUrl:
+                user && user.avatarUrls ? user.avatarUrls["48x48"] : null,
+            };
           })
         );
 
-        setUserEmails(emailResults);
+        setUsers(resolved);
       } catch (err) {
         setError(err.message);
-        console.error("Failed to get context:", err);
+        console.error("Failed to load mentioned users:", err);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchContext();
+    loadMentionedUsers();
   }, []);
 
   if (error) {
@@ -87,29 +98,31 @@ const App = () => {
 
   return (
     <div style={{ padding: "16px" }}>
-      <h2>Selected Text:</h2>
-      <p>{selectedText}</p>
+      <h2>Mentioned Users</h2>
 
-      {Object.keys(userEmails).length > 0 && (
+      {users.length === 0 ? (
+        <p>No @mentions found on this page.</p>
+      ) : (
         <>
-          <h3>Found Users:</h3>
           <ul>
-            {Object.entries(userEmails).map(([name, email]) => (
-              <li key={name}>
-                @{name}: {email}
+            {users.map((user) => (
+              <li key={user.accountId}>
+                {user.name}
+                {user.email ? `: ${user.email}` : ""}
               </li>
             ))}
           </ul>
           <div style={{ marginTop: "16px" }}>
             <button
               onClick={handleCopyEmails}
+              disabled={emails.length === 0}
               style={{
                 padding: "8px 16px",
-                backgroundColor: "#0052CC",
-                color: "white",
+                backgroundColor: emails.length === 0 ? "#DFE1E6" : "#0052CC",
+                color: emails.length === 0 ? "#A5ADBA" : "white",
                 border: "none",
                 borderRadius: "3px",
-                cursor: "pointer",
+                cursor: emails.length === 0 ? "not-allowed" : "pointer",
                 fontSize: "14px",
               }}
             >

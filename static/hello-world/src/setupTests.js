@@ -9,7 +9,8 @@ jest.mock('@forge/bridge', () => ({
   view: {
     getContext: jest.fn()
   },
-  requestJira: jest.fn()
+  requestJira: jest.fn(),
+  requestConfluence: jest.fn()
 }));
 
 // Mock clipboard API

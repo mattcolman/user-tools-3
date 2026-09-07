@@ -1,113 +1,103 @@
-import { findMentions, isValidMention, getUniqueMentions } from './mentionUtils';
+import { findAdfMentions, parseAdf } from './mentionUtils';
+
+const doc = (...content) => ({ type: 'doc', version: 1, content });
+
+const paragraph = (...content) => ({ type: 'paragraph', content });
+
+const mention = (id, text) => ({ type: 'mention', attrs: { id, text } });
+
+const text = (value) => ({ type: 'text', text: value });
 
 describe('mentionUtils', () => {
-  describe('findMentions', () => {
-    it('should find single mention in text', () => {
-      const text = 'Hello @john, how are you?';
-      const result = findMentions(text);
-      expect(result).toEqual(['john']);
+  describe('parseAdf', () => {
+    it('should parse a JSON string body value', () => {
+      expect(parseAdf(JSON.stringify(doc(paragraph(text('hi')))))).toEqual(
+        doc(paragraph(text('hi')))
+      );
     });
 
-    it('should find multiple mentions in text', () => {
-      const text = 'Meeting with @john and @jane tomorrow';
-      const result = findMentions(text);
-      expect(result).toEqual(['john', 'jane']);
+    it('should pass through an already parsed document', () => {
+      const adf = doc(paragraph(text('hi')));
+      expect(parseAdf(adf)).toBe(adf);
     });
 
-    it('should find mentions with spaces in names', () => {
-      const text = 'Please contact @John Smith and @Jane Doe';
-      const result = findMentions(text);
-      // Note: Current implementation captures single words due to space handling
-      // This matches the original App.js behavior where spaces in names need special handling
-      expect(result).toEqual(['John', 'Jane']);
-    });
-
-    it('should handle mentions at the beginning of text', () => {
-      const text = '@admin please review this';
-      const result = findMentions(text);
-      expect(result).toEqual(['admin']);
-    });
-
-    it('should handle mentions at the end of text', () => {
-      const text = 'Thanks for the help @support';
-      const result = findMentions(text);
-      expect(result).toEqual(['support']);
-    });
-
-    it('should handle multiple mentions with same name', () => {
-      const text = '@john said hi. @john is great!';
-      const result = findMentions(text);
-      expect(result).toEqual(['john', 'john']);
-    });
-
-    it('should return empty array for text without mentions', () => {
-      const text = 'This is just regular text';
-      const result = findMentions(text);
-      expect(result).toEqual([]);
-    });
-
-    it('should return empty array for empty string', () => {
-      const result = findMentions('');
-      expect(result).toEqual([]);
-    });
-
-    it('should return empty array for null or undefined', () => {
-      expect(findMentions(null)).toEqual([]);
-      expect(findMentions(undefined)).toEqual([]);
-    });
-
-    it('should handle mentions with special characters in text', () => {
-      const text = 'Email @user.name about the issue!';
-      const result = findMentions(text);
-      expect(result).toEqual(['user.name']);
-    });
-
-    it('should not match email addresses', () => {
-      const text = 'Send email to user@example.com';
-      const result = findMentions(text);
-      expect(result).toEqual([]);
+    it('should return null for empty or invalid input', () => {
+      expect(parseAdf('')).toBeNull();
+      expect(parseAdf(null)).toBeNull();
+      expect(parseAdf(undefined)).toBeNull();
+      expect(parseAdf('not json')).toBeNull();
     });
   });
 
-  describe('isValidMention', () => {
-    it('should return true for valid mentions', () => {
-      expect(isValidMention('@john')).toBe(true);
-      expect(isValidMention('@John Smith')).toBe(true);
-      expect(isValidMention('@user.name')).toBe(true);
+  describe('findAdfMentions', () => {
+    it('should find a single mention', () => {
+      const adf = doc(paragraph(text('Hello '), mention('acc-1', '@John Smith')));
+      expect(findAdfMentions(adf)).toEqual([
+        { accountId: 'acc-1', text: 'John Smith' },
+      ]);
     });
 
-    it('should return false for invalid mentions', () => {
-      expect(isValidMention('john')).toBe(false); // missing @
-      expect(isValidMention('@')).toBe(false); // @ only
-      expect(isValidMention('@@john')).toBe(false); // double @
-      expect(isValidMention('@john@')).toBe(false); // @ at end
+    it('should preserve full display names', () => {
+      const adf = doc(
+        paragraph(mention('acc-1', '@John Smith'), text(' and '), mention('acc-2', '@Jane Doe'))
+      );
+      expect(findAdfMentions(adf)).toEqual([
+        { accountId: 'acc-1', text: 'John Smith' },
+        { accountId: 'acc-2', text: 'Jane Doe' },
+      ]);
     });
 
-    it('should return false for null, undefined, or non-string input', () => {
-      expect(isValidMention(null)).toBe(false);
-      expect(isValidMention(undefined)).toBe(false);
-      expect(isValidMention(123)).toBe(false);
-      expect(isValidMention({})).toBe(false);
+    it('should find mentions nested in tables and lists', () => {
+      const adf = doc({
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [paragraph(mention('acc-1', '@John Smith'))],
+              },
+            ],
+          },
+        ],
+      });
+      expect(findAdfMentions(adf)).toEqual([
+        { accountId: 'acc-1', text: 'John Smith' },
+      ]);
     });
-  });
 
-  describe('getUniqueMentions', () => {
-    it('should return unique mentions only', () => {
-      const text = '@john said hi. @jane replied. @john agreed.';
-      const result = getUniqueMentions(text);
-      expect(result).toEqual(['john', 'jane']);
+    it('should de-duplicate repeated mentions, keeping document order', () => {
+      const adf = doc(
+        paragraph(mention('acc-1', '@John Smith')),
+        paragraph(mention('acc-2', '@Jane Doe')),
+        paragraph(mention('acc-1', '@John Smith'))
+      );
+      expect(findAdfMentions(adf)).toEqual([
+        { accountId: 'acc-1', text: 'John Smith' },
+        { accountId: 'acc-2', text: 'Jane Doe' },
+      ]);
     });
 
-    it('should handle text with no duplicates', () => {
-      const text = '@alice and @bob are here';
-      const result = getUniqueMentions(text);
-      expect(result).toEqual(['alice', 'bob']);
+    it('should ignore mentions without an account id', () => {
+      const adf = doc(paragraph({ type: 'mention', attrs: { text: '@Unknown' } }));
+      expect(findAdfMentions(adf)).toEqual([]);
     });
 
-    it('should return empty array for text without mentions', () => {
-      const text = 'No mentions here';
-      const result = getUniqueMentions(text);
-      expect(result).toEqual([]);
+    it('should default to an empty name when the mention has no text', () => {
+      const adf = doc(paragraph({ type: 'mention', attrs: { id: 'acc-1' } }));
+      expect(findAdfMentions(adf)).toEqual([{ accountId: 'acc-1', text: '' }]);
+    });
+
+    it('should not treat plain text that looks like a mention as a mention', () => {
+      const adf = doc(paragraph(text('Email user@example.com or @nobody')));
+      expect(findAdfMentions(adf)).toEqual([]);
+    });
+
+    it('should return an empty array for empty input', () => {
+      expect(findAdfMentions(null)).toEqual([]);
+      expect(findAdfMentions(undefined)).toEqual([]);
+      expect(findAdfMentions(doc())).toEqual([]);
     });
   });
 });

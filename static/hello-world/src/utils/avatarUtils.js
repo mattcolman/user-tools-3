@@ -2,7 +2,11 @@
  * Utility functions for working with Atlassian avatar images
  */
 
+import { invoke } from "@forge/bridge";
+
 const SIZE_PARAMS = ["size", "s"];
+
+const dataUrlCache = new Map();
 
 /**
  * Rewrites an Atlassian avatar URL to request a larger rendition.
@@ -58,14 +62,41 @@ const loadImage = (url) =>
   });
 
 /**
+ * Resolves an avatar URL to a data URL via the backend resolver. Atlassian
+ * avatar CDNs send no Access-Control-Allow-Origin header, so an avatar loaded
+ * straight from its URL cannot be drawn onto a canvas.
+ * @param {string} url - The avatar URL
+ * @returns {Promise<string>} A data URL, or the original URL if the fetch fails
+ */
+export const avatarDataUrl = async (url) => {
+  if (dataUrlCache.has(url)) {
+    return dataUrlCache.get(url);
+  }
+
+  let resolved = url;
+  try {
+    resolved = await invoke("fetchAvatar", { url });
+  } catch (err) {
+    console.error(`Failed to fetch avatar through the backend: ${url}`, err);
+  }
+
+  dataUrlCache.set(url, resolved);
+  return resolved;
+};
+
+/**
  * Draws the given avatars onto a single transparent PNG, so that one clipboard
  * image carries every selected avatar into a design tool.
  * @param {string[]} urls - Avatar URLs
- * @param {{size?: number, gap?: number}} options - Cell size and gap in pixels
+ * @param {{size?: number, gap?: number, resolveSource?: function}} options - Cell size, gap in pixels, and the URL resolver
  * @returns {Promise<Blob>} The rendered sheet
  */
-export const createAvatarSheet = async (urls, { size = 256, gap = 16 } = {}) => {
-  const images = await Promise.all(urls.map(loadImage));
+export const createAvatarSheet = async (
+  urls,
+  { size = 256, gap = 16, resolveSource = avatarDataUrl } = {}
+) => {
+  const sources = await Promise.all(urls.map((url) => resolveSource(url)));
+  const images = await Promise.all(sources.map(loadImage));
   const { columns, rows } = avatarSheetLayout(images.length);
 
   const canvas = document.createElement("canvas");

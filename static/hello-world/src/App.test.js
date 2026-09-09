@@ -104,7 +104,7 @@ describe('App Component', () => {
       });
     });
 
-    it('should display error when clipboard write fails', async () => {
+    it('should report a clipboard failure without hiding the grid', async () => {
       mockTwoUsers();
       navigator.clipboard.writeText.mockRejectedValue(new Error('Clipboard error'));
 
@@ -115,9 +115,10 @@ describe('App Component', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText('Error: Failed to copy emails to clipboard')
+          screen.getByText('Failed to copy emails to clipboard')
         ).toBeInTheDocument();
       });
+      expect(screen.getByText('2 of 2 selected')).toBeInTheDocument();
     });
   });
 
@@ -285,6 +286,22 @@ describe('App Component', () => {
         );
         expect(screen.getByText('✓ Downloaded avatars.png')).toBeInTheDocument();
       });
+    });
+
+    it('should keep the grid when a download fails', async () => {
+      mockTwoUsers();
+      downloadAvatarSheet.mockRejectedValue(new Error('canvas blocked'));
+
+      render(<App />);
+      await waitForGrid();
+
+      fireEvent.click(button('Download avatars'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to download avatars')).toBeInTheDocument();
+      });
+      expect(screen.getByText('2 of 2 selected')).toBeInTheDocument();
+      expect(button('Download avatars')).toBeEnabled();
     });
 
     it('should hide the status message after a timeout', async () => {

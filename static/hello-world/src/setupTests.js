@@ -10,7 +10,8 @@ jest.mock('@forge/bridge', () => ({
     getContext: jest.fn()
   },
   requestJira: jest.fn(),
-  requestConfluence: jest.fn()
+  requestConfluence: jest.fn(),
+  invoke: jest.fn()
 }));
 
 // Mock clipboard API

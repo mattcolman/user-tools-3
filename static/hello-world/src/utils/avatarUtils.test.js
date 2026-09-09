@@ -1,4 +1,5 @@
-import { avatarSheetLayout, withAvatarSize } from './avatarUtils';
+import { invoke } from '@forge/bridge';
+import { avatarDataUrl, avatarSheetLayout, withAvatarSize } from './avatarUtils';
 
 describe('avatarUtils', () => {
   describe('withAvatarSize', () => {
@@ -26,6 +27,30 @@ describe('avatarUtils', () => {
     it('should return null when there is no url', () => {
       expect(withAvatarSize(null, 256)).toBeNull();
       expect(withAvatarSize(undefined, 256)).toBeNull();
+    });
+  });
+
+  describe('avatarDataUrl', () => {
+    beforeEach(() => {
+      invoke.mockReset();
+    });
+
+    it('should fetch the avatar bytes through the resolver, caching the result', async () => {
+      invoke.mockResolvedValue('data:image/png;base64,AAAA');
+
+      const url = 'https://avatars.example.net/cached?size=256';
+      await expect(avatarDataUrl(url)).resolves.toBe('data:image/png;base64,AAAA');
+      await expect(avatarDataUrl(url)).resolves.toBe('data:image/png;base64,AAAA');
+
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith('fetchAvatar', { url });
+    });
+
+    it('should fall back to the original url when the resolver fails', async () => {
+      invoke.mockRejectedValue(new Error('resolver down'));
+
+      const url = 'https://avatars.example.net/failing?size=256';
+      await expect(avatarDataUrl(url)).resolves.toBe(url);
     });
   });
 

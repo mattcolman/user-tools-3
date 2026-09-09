@@ -53,6 +53,7 @@ const App = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   const selectedUsers = users.filter((user) =>
     selectedIds.includes(user.accountId)
@@ -61,8 +62,14 @@ const App = () => {
   const avatarUrls = selectedUsers.map((user) => user.avatarUrl).filter(Boolean);
 
   const showStatus = (message) => {
+    setActionError(null);
     setStatus(message);
     setTimeout(() => setStatus(null), 2000);
+  };
+
+  const showActionError = (message) => {
+    setStatus(null);
+    setActionError(message);
   };
 
   const toggleUser = (accountId) => {
@@ -79,7 +86,7 @@ const App = () => {
       showStatus("✓ Copied email addresses");
     } catch (err) {
       console.error("Failed to copy emails:", err);
-      setError("Failed to copy emails to clipboard");
+      showActionError("Failed to copy emails to clipboard");
     }
   };
 
@@ -94,7 +101,7 @@ const App = () => {
         showStatus("Couldn't copy the images, copied avatar URLs instead");
       } catch (textErr) {
         console.error("Failed to copy avatar URLs:", textErr);
-        setError("Failed to copy avatars to clipboard");
+        showActionError("Failed to copy avatars to clipboard");
       }
     }
   };
@@ -105,7 +112,7 @@ const App = () => {
       showStatus("✓ Downloaded avatars.png");
     } catch (err) {
       console.error("Failed to download avatars:", err);
-      setError("Failed to download avatars");
+      showActionError("Failed to download avatars");
     }
   };
 
@@ -220,6 +227,9 @@ const App = () => {
         </Button>
         {status && (
           <span style={{ color: "#00875A", fontSize: "14px" }}>{status}</span>
+        )}
+        {actionError && (
+          <span style={{ color: "#DE350B", fontSize: "14px" }}>{actionError}</span>
         )}
       </div>
     </div>

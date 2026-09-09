@@ -21,7 +21,7 @@ permissions:
       - "*.public.atl-paas.net"
       - "https://secure.gravatar.com"
     fetch:
-      client:
+      backend:
         - "*.public.atl-paas.net"
         - "https://secure.gravatar.com"
 app:

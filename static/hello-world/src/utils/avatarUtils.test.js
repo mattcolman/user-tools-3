@@ -1,0 +1,69 @@
+import { invoke } from '@forge/bridge';
+import { avatarDataUrl, avatarSheetLayout, withAvatarSize } from './avatarUtils';
+
+describe('avatarUtils', () => {
+  describe('withAvatarSize', () => {
+    it('should override every size param Jira sets', () => {
+      expect(
+        withAvatarSize(
+          'https://avatars.example.net/initials/MK-5.png?size=48&s=48',
+          256
+        )
+      ).toBe('https://avatars.example.net/initials/MK-5.png?size=256&s=256');
+    });
+
+    it('should override the gravatar size param', () => {
+      expect(
+        withAvatarSize('https://secure.gravatar.com/avatar/abc?s=48&d=mm', 256)
+      ).toBe('https://secure.gravatar.com/avatar/abc?s=256&d=mm');
+    });
+
+    it('should add a size param when the url has none', () => {
+      expect(withAvatarSize('https://avatars.example.net/abc/def', 256)).toBe(
+        'https://avatars.example.net/abc/def?size=256'
+      );
+    });
+
+    it('should return null when there is no url', () => {
+      expect(withAvatarSize(null, 256)).toBeNull();
+      expect(withAvatarSize(undefined, 256)).toBeNull();
+    });
+  });
+
+  describe('avatarDataUrl', () => {
+    beforeEach(() => {
+      invoke.mockReset();
+    });
+
+    it('should fetch the avatar bytes through the resolver, caching the result', async () => {
+      invoke.mockResolvedValue('data:image/png;base64,AAAA');
+
+      const url = 'https://avatars.example.net/cached?size=256';
+      await expect(avatarDataUrl(url)).resolves.toBe('data:image/png;base64,AAAA');
+      await expect(avatarDataUrl(url)).resolves.toBe('data:image/png;base64,AAAA');
+
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith('fetchAvatar', { url });
+    });
+
+    it('should fall back to the original url when the resolver fails', async () => {
+      invoke.mockRejectedValue(new Error('resolver down'));
+
+      const url = 'https://avatars.example.net/failing?size=256';
+      await expect(avatarDataUrl(url)).resolves.toBe(url);
+    });
+  });
+
+  describe('avatarSheetLayout', () => {
+    it('should lay avatars out in a near-square grid', () => {
+      expect(avatarSheetLayout(1)).toEqual({ columns: 1, rows: 1 });
+      expect(avatarSheetLayout(4)).toEqual({ columns: 2, rows: 2 });
+      expect(avatarSheetLayout(5)).toEqual({ columns: 3, rows: 2 });
+      expect(avatarSheetLayout(10)).toEqual({ columns: 4, rows: 3 });
+    });
+
+    it('should have no dimensions when there is nothing to lay out', () => {
+      expect(avatarSheetLayout(0)).toEqual({ columns: 0, rows: 0 });
+    });
+  });
+});

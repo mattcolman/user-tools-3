@@ -16,6 +16,14 @@ permissions:
     - read:jira-user    
     - read:confluence-user
     - read:page:confluence
+  external:
+    images:
+      - "*.public.atl-paas.net"
+      - "https://secure.gravatar.com"
+    fetch:
+      backend:
+        - "*.public.atl-paas.net"
+        - "https://secure.gravatar.com"
 app:
   runtime:
     name: nodejs22.x

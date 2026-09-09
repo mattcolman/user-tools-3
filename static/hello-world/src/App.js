@@ -1,6 +1,15 @@
 import React, { useState, useEffect } from "react";
+import Button from "@atlaskit/button/new";
 import { view, requestConfluence, requestJira } from "@forge/bridge";
 import { findAdfMentions, parseAdf } from "./utils/mentionUtils";
+import {
+  copyAvatarsToClipboard,
+  downloadAvatarSheet,
+  withAvatarSize,
+} from "./utils/avatarUtils";
+import UserCard from "./UserCard";
+
+const AVATAR_EXPORT_SIZE = 256;
 
 const fetchPageMentions = async (pageId) => {
   const response = await requestConfluence(
@@ -40,20 +49,70 @@ const fetchUser = async (accountId) => {
 
 const App = () => {
   const [users, setUsers] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [copySuccess, setCopySuccess] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
-  const emails = users.map((user) => user.email).filter(Boolean);
+  const selectedUsers = users.filter((user) =>
+    selectedIds.includes(user.accountId)
+  );
+  const emails = selectedUsers.map((user) => user.email).filter(Boolean);
+  const avatarUrls = selectedUsers.map((user) => user.avatarUrl).filter(Boolean);
+
+  const showStatus = (message) => {
+    setActionError(null);
+    setStatus(message);
+    setTimeout(() => setStatus(null), 2000);
+  };
+
+  const showActionError = (message) => {
+    setStatus(null);
+    setActionError(message);
+  };
+
+  const toggleUser = (accountId) => {
+    setSelectedIds((current) =>
+      current.includes(accountId)
+        ? current.filter((id) => id !== accountId)
+        : [...current, accountId]
+    );
+  };
 
   const handleCopyEmails = async () => {
     try {
       await navigator.clipboard.writeText(emails.join("\n"));
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
+      showStatus("✓ Copied email addresses");
     } catch (err) {
       console.error("Failed to copy emails:", err);
-      setError("Failed to copy emails to clipboard");
+      showActionError("Failed to copy emails to clipboard");
+    }
+  };
+
+  const handleCopyAvatars = async () => {
+    try {
+      await copyAvatarsToClipboard(avatarUrls, { size: AVATAR_EXPORT_SIZE });
+      showStatus("✓ Copied avatars — paste them into Figma");
+    } catch (err) {
+      console.error("Failed to copy avatars:", err);
+      try {
+        await navigator.clipboard.writeText(avatarUrls.join("\n"));
+        showStatus("Couldn't copy the images, copied avatar URLs instead");
+      } catch (textErr) {
+        console.error("Failed to copy avatar URLs:", textErr);
+        showActionError("Failed to copy avatars to clipboard");
+      }
+    }
+  };
+
+  const handleDownloadAvatars = async () => {
+    try {
+      await downloadAvatarSheet(avatarUrls, { size: AVATAR_EXPORT_SIZE });
+      showStatus("✓ Downloaded avatars.png");
+    } catch (err) {
+      console.error("Failed to download avatars:", err);
+      showActionError("Failed to download avatars");
     }
   };
 
@@ -72,12 +131,15 @@ const App = () => {
               name: (user && user.displayName) || mention.text,
               email: user ? user.emailAddress : null,
               avatarUrl:
-                user && user.avatarUrls ? user.avatarUrls["48x48"] : null,
+                user && user.avatarUrls
+                  ? withAvatarSize(user.avatarUrls["48x48"], AVATAR_EXPORT_SIZE)
+                  : null,
             };
           })
         );
 
         setUsers(resolved);
+        setSelectedIds(resolved.map((user) => user.accountId));
       } catch (err) {
         setError(err.message);
         console.error("Failed to load mentioned users:", err);
@@ -96,52 +158,80 @@ const App = () => {
     return <div style={{ padding: "16px" }}>Loading...</div>;
   }
 
+  if (users.length === 0) {
+    return (
+      <div style={{ padding: "16px" }}>
+        <h2>Mentioned Users</h2>
+        <p>No @mentions found on this page.</p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "16px" }}>
       <h2>Mentioned Users</h2>
+      <p>
+        {selectedUsers.length} of {users.length} selected
+      </p>
 
-      {users.length === 0 ? (
-        <p>No @mentions found on this page.</p>
-      ) : (
-        <>
-          <ul>
-            {users.map((user) => (
-              <li key={user.accountId}>
-                {user.name}
-                {user.email ? `: ${user.email}` : ""}
-              </li>
-            ))}
-          </ul>
-          <div style={{ marginTop: "16px" }}>
-            <button
-              onClick={handleCopyEmails}
-              disabled={emails.length === 0}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: emails.length === 0 ? "#DFE1E6" : "#0052CC",
-                color: emails.length === 0 ? "#A5ADBA" : "white",
-                border: "none",
-                borderRadius: "3px",
-                cursor: emails.length === 0 ? "not-allowed" : "pointer",
-                fontSize: "14px",
-              }}
-            >
-              Copy Email Addresses
-            </button>
-            {copySuccess && (
-              <span
-                style={{
-                  color: "#00875A",
-                  marginLeft: "8px",
-                  fontSize: "14px",
-                }}
-              >
-                ✓ Copied to clipboard!
-              </span>
-            )}
-          </div>
-        </>
-      )}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+          gap: "12px",
+          marginBottom: "16px",
+        }}
+      >
+        {users.map((user) => (
+          <UserCard
+            key={user.accountId}
+            user={user}
+            isSelected={selectedIds.includes(user.accountId)}
+            onToggle={toggleUser}
+          />
+        ))}
+      </div>
+
+      <div
+        style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}
+      >
+        <Button
+          appearance="subtle"
+          onClick={() => setSelectedIds(users.map((user) => user.accountId))}
+          isDisabled={selectedUsers.length === users.length}
+        >
+          Select all
+        </Button>
+        <Button
+          appearance="subtle"
+          onClick={() => setSelectedIds([])}
+          isDisabled={selectedUsers.length === 0}
+        >
+          Select none
+        </Button>
+        <Button
+          appearance="primary"
+          onClick={handleCopyAvatars}
+          isDisabled={avatarUrls.length === 0}
+        >
+          Copy avatars
+        </Button>
+        <Button onClick={handleCopyEmails} isDisabled={emails.length === 0}>
+          Copy email addresses
+        </Button>
+        <Button
+          onClick={handleDownloadAvatars}
+          isDisabled={avatarUrls.length === 0}
+        >
+          Download avatars
+        </Button>
+        {status && (
+          <span style={{ color: "#00875A", fontSize: "14px" }}>{status}</span>
+        )}
+        {actionError && (
+          <span style={{ color: "#DE350B", fontSize: "14px" }}>{actionError}</span>
+        )}
+      </div>
     </div>
   );
 };
